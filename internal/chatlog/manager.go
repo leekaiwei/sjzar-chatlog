@@ -3,6 +3,7 @@ package chatlog
 import (
 	"context"
 	"fmt"
+	"net"
 	"path/filepath"
 	"strings"
 
@@ -183,7 +184,37 @@ func (m *Manager) SetHTTPAddr(text string) error {
 	} else {
 		addr = text
 	}
+	if err := validateHTTPAddr(addr); err != nil {
+		return err
+	}
 	m.ctx.SetHTTPAddr(addr)
+	return nil
+}
+
+func validateHTTPAddr(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("invalid HTTP address %q: %w", addr, err)
+	}
+	if host == "" {
+		return fmt.Errorf("invalid HTTP address %q: host is required", addr)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		ips, err := net.LookupIP(host)
+		if err != nil {
+			return fmt.Errorf("invalid HTTP address %q: %w", addr, err)
+		}
+		for _, resolved := range ips {
+			if !resolved.IsLoopback() {
+				return fmt.Errorf("refusing to bind HTTP server to non-loopback host %q", host)
+			}
+		}
+		return nil
+	}
+	if !ip.IsLoopback() {
+		return fmt.Errorf("refusing to bind HTTP server to non-loopback host %q", host)
+	}
 	return nil
 }
 

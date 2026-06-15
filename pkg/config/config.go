@@ -19,6 +19,7 @@ package config
 import (
 	"errors"
 	"os"
+	"path/filepath"
 
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
@@ -26,6 +27,8 @@ import (
 
 const (
 	DefaultConfigType = "json"
+	configDirPerm     = 0700
+	configFilePerm    = 0600
 )
 
 var (
@@ -83,6 +86,9 @@ func Load(conf interface{}) error {
 			return err
 		}
 	}
+	if err := secureConfigFile(); err != nil {
+		return err
+	}
 	if err := viper.Unmarshal(conf); err != nil {
 		return err
 	}
@@ -111,7 +117,7 @@ func SetConfig(key string, value interface{}) error {
 	if err := viper.WriteConfig(); err != nil {
 		return err
 	}
-	return nil
+	return secureConfigFile()
 }
 
 // ResetConfig resets the configuration to empty.
@@ -120,7 +126,10 @@ func ResetConfig() error {
 	viper.SetConfigName(ConfigName)
 	viper.SetConfigType(ConfigType)
 	viper.AddConfigPath(ConfigPath)
-	return viper.WriteConfig()
+	if err := viper.WriteConfig(); err != nil {
+		return err
+	}
+	return secureConfigFile()
 }
 
 // GetConfig retrieves all configuration settings as a map.
@@ -134,7 +143,7 @@ func PrepareDir(path string) error {
 	stat, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := os.MkdirAll(path, configDirPerm); err != nil {
 				return err
 			}
 		} else {
@@ -144,5 +153,16 @@ func PrepareDir(path string) error {
 		log.Debug().Msgf("%s is not a directory", path)
 		return ErrInvalidDirectory
 	}
-	return nil
+	return os.Chmod(path, configDirPerm)
+}
+
+func secureConfigFile() error {
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		configFile = filepath.Join(ConfigPath, ConfigName+"."+ConfigType)
+	}
+	if _, err := os.Stat(configFile); err != nil {
+		return err
+	}
+	return os.Chmod(configFile, configFilePerm)
 }

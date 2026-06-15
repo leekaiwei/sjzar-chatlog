@@ -60,6 +60,7 @@ func New(conf *conf.Service) *Context {
 
 func (c *Context) loadConfig() {
 	conf := c.conf.GetConfig()
+	_ = conf.PurgeDataKeys()
 	c.History = conf.ParseHistory()
 	c.SwitchHistory(conf.LastAccount)
 	c.Refresh()
@@ -178,7 +179,7 @@ func (c *Context) UpdateConfig() {
 		Version:     c.Version,
 		FullVersion: c.FullVersion,
 		DataDir:     c.DataDir,
-		DataKey:     c.DataKey,
+		DataKey:     "",
 		WorkDir:     c.WorkDir,
 		HTTPEnabled: c.HTTPEnabled,
 		HTTPAddr:    c.HTTPAddr,
