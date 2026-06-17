@@ -66,3 +66,26 @@ func TestHostHeaderAllowedPortlessMismatchPort(t *testing.T) {
 		t.Fatal("expected portless Host header to be rejected when server is not on port 80")
 	}
 }
+
+func TestHostHeaderAllowedNamedPort(t *testing.T) {
+	// Server started with a named port (e.g. "http-alt" = 8080); clients send the
+	// numeric port in the Host header so the comparison must be normalized.
+	allowed, err := hostHeaderAllowed("127.0.0.1:8080", "127.0.0.1:http-alt")
+	if err != nil {
+		t.Fatalf("hostHeaderAllowed returned error: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected numeric port matching a named server port to be allowed")
+	}
+}
+
+func TestHostHeaderAllowedNamedPortRejectsWrong(t *testing.T) {
+	// A numeric port that does not match the resolved named port should be rejected.
+	allowed, err := hostHeaderAllowed("127.0.0.1:9090", "127.0.0.1:http-alt")
+	if err != nil {
+		t.Fatalf("hostHeaderAllowed returned error: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected mismatched port to be rejected when server uses a named port")
+	}
+}

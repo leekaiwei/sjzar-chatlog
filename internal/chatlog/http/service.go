@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,12 +78,18 @@ func hostHeaderAllowed(requestHost, serverAddr string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	// Resolve service-name ports (e.g. "http-alt") to their numeric equivalents
+	// so that the comparison works even when the server is started with a named port.
+	serverPort = resolvePort(serverPort)
+
 	host, port, err := net.SplitHostPort(requestHost)
 	if err != nil {
 		// Host header without a port is valid HTTP/1.1; default port is 80.
 		host = requestHost
 		port = "80"
 	}
+	port = resolvePort(port)
+
 	if port != serverPort {
 		return false, nil
 	}
@@ -92,6 +99,17 @@ func hostHeaderAllowed(requestHost, serverAddr string) (bool, error) {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback(), nil
+}
+
+// resolvePort converts a service name (e.g. "http-alt") to its numeric port
+// string (e.g. "8080"). If the port is already numeric or the lookup fails,
+// the original value is returned unchanged.
+func resolvePort(port string) string {
+	n, err := net.LookupPort("tcp", port)
+	if err != nil {
+		return port
+	}
+	return strconv.Itoa(n)
 }
 
 func (s *Service) Start() error {
