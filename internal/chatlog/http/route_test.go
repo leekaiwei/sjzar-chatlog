@@ -21,13 +21,15 @@ func TestResolveDataPathAllowsNestedDataFile(t *testing.T) {
 	base := t.TempDir()
 	s := &Service{ctx: &chatctx.Context{DataDir: base}}
 
-	got, ok := s.resolveDataPath("nested/media.jpg")
-	if !ok {
-		t.Fatal("expected nested relative path to be allowed")
-	}
 	want := filepath.Join(base, "nested", "media.jpg")
-	if got != want {
-		t.Fatalf("resolveDataPath() = %q, want %q", got, want)
+	for _, in := range []string{"nested/media.jpg", "/nested/media.jpg"} {
+		got, ok := s.resolveDataPath(in)
+		if !ok {
+			t.Fatalf("expected %q to be allowed", in)
+		}
+		if got != want {
+			t.Fatalf("resolveDataPath(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

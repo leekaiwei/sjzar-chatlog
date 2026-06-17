@@ -285,7 +285,7 @@ func (s *Service) resolveDataPath(relativePath string) (string, bool) {
 	if base == "." || base == string(filepath.Separator) {
 		return "", false
 	}
-	relativePath = filepath.Clean(strings.TrimPrefix(relativePath, string(filepath.Separator)))
+	relativePath = filepath.Clean(filepath.FromSlash(strings.TrimLeft(relativePath, "/\\")))
 	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
 		return "", false
 	}
