@@ -1,6 +1,7 @@
 package ctx
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -60,7 +61,9 @@ func New(conf *conf.Service) *Context {
 
 func (c *Context) loadConfig() {
 	conf := c.conf.GetConfig()
-	_ = conf.PurgeDataKeys()
+	if err := conf.PurgeDataKeys(); err != nil {
+		log.Printf("WARNING: failed to purge data_key values from config history: %v", err)
+	}
 	c.History = conf.ParseHistory()
 	c.SwitchHistory(conf.LastAccount)
 	c.Refresh()
