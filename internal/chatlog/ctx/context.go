@@ -1,7 +1,7 @@
 package ctx
 
 import (
-	"log"
+	"fmt"
 	"sync"
 	"time"
 
@@ -49,24 +49,27 @@ type Context struct {
 	WeChatInstances []*wechat.Account
 }
 
-func New(conf *conf.Service) *Context {
+func New(conf *conf.Service) (*Context, error) {
 	ctx := &Context{
 		conf: conf,
 	}
 
-	ctx.loadConfig()
+	if err := ctx.loadConfig(); err != nil {
+		return nil, err
+	}
 
-	return ctx
+	return ctx, nil
 }
 
-func (c *Context) loadConfig() {
+func (c *Context) loadConfig() error {
 	conf := c.conf.GetConfig()
 	if err := conf.PurgeDataKeys(); err != nil {
-		log.Printf("WARNING: failed to purge data_key values from config history: %v", err)
+		return fmt.Errorf("failed to purge data_key values from config history: %w", err)
 	}
 	c.History = conf.ParseHistory()
 	c.SwitchHistory(conf.LastAccount)
 	c.Refresh()
+	return nil
 }
 
 func (c *Context) SwitchHistory(account string) {

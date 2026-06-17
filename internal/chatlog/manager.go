@@ -43,7 +43,10 @@ func New(configPath string) (*Manager, error) {
 	}
 
 	// 创建应用上下文
-	ctx := ctx.New(conf)
+	ctx, err := ctx.New(conf)
+	if err != nil {
+		return nil, err
+	}
 
 	wechat := wechat.NewService(ctx)
 
