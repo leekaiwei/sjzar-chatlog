@@ -79,7 +79,9 @@ func hostHeaderAllowed(requestHost, serverAddr string) (bool, error) {
 	}
 	host, port, err := net.SplitHostPort(requestHost)
 	if err != nil {
-		return false, err
+		// Host header without a port is valid HTTP/1.1; default port is 80.
+		host = requestHost
+		port = "80"
 	}
 	if port != serverPort {
 		return false, nil

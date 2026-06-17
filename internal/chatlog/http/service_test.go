@@ -33,3 +33,36 @@ func TestHostHeaderAllowedRejectsWrongPort(t *testing.T) {
 		t.Fatal("expected wrong Host port to be rejected")
 	}
 }
+
+func TestHostHeaderAllowedPortlessOnPort80(t *testing.T) {
+	// HTTP clients omit the port in Host header when binding to port 80.
+	allowed, err := hostHeaderAllowed("127.0.0.1", "127.0.0.1:80")
+	if err != nil {
+		t.Fatalf("hostHeaderAllowed returned error: %v", err)
+	}
+	if !allowed {
+		t.Fatal("expected portless loopback Host header to be allowed on port 80")
+	}
+}
+
+func TestHostHeaderAllowedPortlessRejectsNonLoopback(t *testing.T) {
+	// Portless non-loopback host should be rejected even with port-80 server.
+	allowed, err := hostHeaderAllowed("attacker.test", "127.0.0.1:80")
+	if err != nil {
+		t.Fatalf("hostHeaderAllowed returned error: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected portless non-loopback Host header to be rejected")
+	}
+}
+
+func TestHostHeaderAllowedPortlessMismatchPort(t *testing.T) {
+	// Portless Host (implicit 80) should be rejected when server is on a different port.
+	allowed, err := hostHeaderAllowed("127.0.0.1", "127.0.0.1:5030")
+	if err != nil {
+		t.Fatalf("hostHeaderAllowed returned error: %v", err)
+	}
+	if allowed {
+		t.Fatal("expected portless Host header to be rejected when server is not on port 80")
+	}
+}
