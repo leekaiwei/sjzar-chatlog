@@ -280,6 +280,48 @@ func (s *Service) GetVoice(c *gin.Context) {
 	s.GetMedia(c, "voice")
 }
 
+func (s *Service) resolveDataPath(relativePath string) (string, bool) {
+	base := filepath.Clean(s.ctx.DataDir)
+	if base == "." || base == string(filepath.Separator) {
+		return "", false
+	}
+	relativePath = filepath.Clean(filepath.FromSlash(strings.TrimLeft(relativePath, "/\\")))
+	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
+		return "", false
+	}
+	// Note: on Windows, drive-relative paths (e.g. "C:foo") and reserved device
+	// names (e.g. "NUL", "CON") pass the lexical checks above but are not
+	// exploitable for directory escape — the filepath.Rel containment check
+	// below rejects any path outside base, and EvalSymlinks/Stat in
+	// resolveExistingDataPath will error on device names before any I/O occurs.
+	target := filepath.Clean(filepath.Join(base, relativePath))
+	rel, err := filepath.Rel(base, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return target, true
+}
+
+func (s *Service) resolveExistingDataPath(relativePath string) (string, bool) {
+	target, ok := s.resolveDataPath(relativePath)
+	if !ok {
+		return "", false
+	}
+	resolved, err := filepath.EvalSymlinks(target)
+	if err != nil {
+		return "", false
+	}
+	base, err := filepath.EvalSymlinks(filepath.Clean(s.ctx.DataDir))
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(base, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
+		return "", false
+	}
+	return resolved, true
+}
+
 func (s *Service) GetMedia(c *gin.Context, _type string) {
 	key := strings.TrimPrefix(c.Param("key"), "/")
 	if key == "" {
@@ -296,11 +338,18 @@ func (s *Service) GetMedia(c *gin.Context, _type string) {
 	var _err error
 	for _, k := range keys {
 		if len(k) != 32 {
-			absolutePath := filepath.Join(s.ctx.DataDir, k)
+			if _, ok := s.resolveDataPath(k); !ok {
+				c.JSON(http.StatusForbidden, gin.H{"error": "invalid path"})
+				return
+			}
+			absolutePath, ok := s.resolveExistingDataPath(k)
+			if !ok {
+				continue
+			}
 			if _, err := os.Stat(absolutePath); os.IsNotExist(err) {
 				continue
 			}
-			c.Redirect(http.StatusFound, "/data/"+k)
+			c.Redirect(http.StatusFound, "/data/"+strings.TrimPrefix(filepath.ToSlash(k), "/"))
 			return
 		}
 		media, err := s.db.GetMedia(_type, k)
@@ -329,14 +378,23 @@ func (s *Service) GetMedia(c *gin.Context, _type string) {
 }
 
 func (s *Service) GetMediaData(c *gin.Context) {
-	relativePath := filepath.Clean(c.Param("path"))
+	requestedPath := c.Param("path")
+	lexicalPath, ok := s.resolveDataPath(requestedPath)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "invalid path"})
+		return
+	}
 
-	absolutePath := filepath.Join(s.ctx.DataDir, relativePath)
-
-	if _, err := os.Stat(absolutePath); os.IsNotExist(err) {
+	if _, err := os.Stat(lexicalPath); os.IsNotExist(err) {
 		c.JSON(http.StatusNotFound, gin.H{
 			"error": "File not found",
 		})
+		return
+	}
+
+	absolutePath, ok := s.resolveExistingDataPath(requestedPath)
+	if !ok {
+		c.JSON(http.StatusForbidden, gin.H{"error": "invalid path"})
 		return
 	}
 

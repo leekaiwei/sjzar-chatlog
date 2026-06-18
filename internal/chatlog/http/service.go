@@ -2,7 +2,11 @@ package http
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sjzar/chatlog/internal/chatlog/ctx"
@@ -50,14 +54,72 @@ func NewService(ctx *ctx.Context, db *database.Service, mcp *mcp.Service) *Servi
 		router: router,
 	}
 
+	router.Use(s.validateHostHeader())
 	s.initRouter()
 	return s
+}
+
+func (s *Service) validateHostHeader() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		allowed, err := hostHeaderAllowed(c.Request.Host, s.ctx.HTTPAddr)
+		if err != nil || !allowed {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "invalid host"})
+			return
+		}
+		c.Next()
+	}
+}
+
+func hostHeaderAllowed(requestHost, serverAddr string) (bool, error) {
+	if serverAddr == "" {
+		serverAddr = DefalutHTTPAddr
+	}
+	_, serverPort, err := net.SplitHostPort(serverAddr)
+	if err != nil {
+		return false, err
+	}
+	// Resolve service-name ports (e.g. "http-alt") to their numeric equivalents
+	// so that the comparison works even when the server is started with a named port.
+	serverPort = resolvePort(serverPort)
+
+	host, port, err := net.SplitHostPort(requestHost)
+	if err != nil {
+		// Host header without a port is valid HTTP/1.1; default port is 80.
+		host = requestHost
+		port = "80"
+	}
+	port = resolvePort(port)
+
+	if port != serverPort {
+		return false, nil
+	}
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	if host == "localhost" {
+		return true, nil
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback(), nil
+}
+
+// resolvePort converts a service name (e.g. "http-alt") to its numeric port
+// string (e.g. "8080"). If the port is already numeric or the lookup fails,
+// the original value is returned unchanged.
+func resolvePort(port string) string {
+	n, err := net.LookupPort("tcp", port)
+	if err != nil {
+		return port
+	}
+	return strconv.Itoa(n)
 }
 
 func (s *Service) Start() error {
 
 	if s.ctx.HTTPAddr == "" {
 		s.ctx.HTTPAddr = DefalutHTTPAddr
+	}
+
+	if err := validateLoopbackAddr(s.ctx.HTTPAddr); err != nil {
+		return err
 	}
 
 	s.server = &http.Server{
@@ -83,6 +145,10 @@ func (s *Service) ListenAndServe() error {
 		s.ctx.HTTPAddr = DefalutHTTPAddr
 	}
 
+	if err := validateLoopbackAddr(s.ctx.HTTPAddr); err != nil {
+		return err
+	}
+
 	s.server = &http.Server{
 		Addr:    s.ctx.HTTPAddr,
 		Handler: s.router,
@@ -90,6 +156,33 @@ func (s *Service) ListenAndServe() error {
 
 	log.Info().Msg("Starting HTTP server on " + s.ctx.HTTPAddr)
 	return s.server.ListenAndServe()
+}
+
+func validateLoopbackAddr(addr string) error {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("invalid HTTP address %q: %w", addr, err)
+	}
+	if host == "" {
+		return fmt.Errorf("invalid HTTP address %q: host is required", addr)
+	}
+	ip := net.ParseIP(host)
+	if ip != nil {
+		if !ip.IsLoopback() {
+			return fmt.Errorf("refusing to bind HTTP server to non-loopback host %q", host)
+		}
+		return nil
+	}
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("invalid HTTP address %q: %w", addr, err)
+	}
+	for _, resolved := range ips {
+		if !resolved.IsLoopback() {
+			return fmt.Errorf("refusing to bind HTTP server to non-loopback host %q", host)
+		}
+	}
+	return nil
 }
 
 func (s *Service) Stop() error {

@@ -32,12 +32,28 @@ type File struct {
 func (c *Config) ParseHistory() map[string]ProcessConfig {
 	m := make(map[string]ProcessConfig)
 	for _, v := range c.History {
+		v.DataKey = ""
 		m[v.Account] = v
 	}
 	return m
 }
 
+func (c *Config) PurgeDataKeys() error {
+	changed := false
+	for i := range c.History {
+		if c.History[i].DataKey != "" {
+			c.History[i].DataKey = ""
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	return config.SetConfig("history", c.History)
+}
+
 func (c *Config) UpdateHistory(account string, conf ProcessConfig) error {
+	conf.DataKey = ""
 	if c.History == nil {
 		c.History = make([]ProcessConfig, 0)
 	}
@@ -46,6 +62,7 @@ func (c *Config) UpdateHistory(account string, conf ProcessConfig) error {
 	} else {
 		isFind := false
 		for i, v := range c.History {
+			c.History[i].DataKey = ""
 			if v.Account == account {
 				isFind = true
 				c.History[i] = conf
