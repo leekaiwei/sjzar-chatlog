@@ -139,6 +139,11 @@ func GetConfig() map[string]interface{} {
 
 // PrepareDir ensures that the specified directory path exists.
 // If the directory does not exist, it attempts to create it.
+//
+// Note: on Windows, os.Chmod only toggles the read-only bit and does not
+// set NTFS ACLs, so configDirPerm (0700) is effectively a no-op for access
+// control there. On Windows the data_key purge in PurgeDataKeys is therefore
+// the primary defence for sensitive data, not the file-system permissions.
 func PrepareDir(path string) error {
 	stat, err := os.Stat(path)
 	if err != nil {
@@ -157,6 +162,8 @@ func PrepareDir(path string) error {
 }
 
 func secureConfigFile() error {
+	// Note: on Windows os.Chmod only toggles the read-only bit; it does not
+	// set NTFS ACLs, so configFilePerm (0600) is a near-no-op there.
 	configFile := viper.ConfigFileUsed()
 	if configFile == "" {
 		configFile = filepath.Join(ConfigPath, ConfigName+"."+ConfigType)

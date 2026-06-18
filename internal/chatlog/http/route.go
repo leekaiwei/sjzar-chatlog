@@ -289,6 +289,11 @@ func (s *Service) resolveDataPath(relativePath string) (string, bool) {
 	if relativePath == ".." || strings.HasPrefix(relativePath, ".."+string(filepath.Separator)) || filepath.IsAbs(relativePath) {
 		return "", false
 	}
+	// Note: on Windows, drive-relative paths (e.g. "C:foo") and reserved device
+	// names (e.g. "NUL", "CON") pass the lexical checks above but are not
+	// exploitable for directory escape — the filepath.Rel containment check
+	// below rejects any path outside base, and EvalSymlinks/Stat in
+	// resolveExistingDataPath will error on device names before any I/O occurs.
 	target := filepath.Clean(filepath.Join(base, relativePath))
 	rel, err := filepath.Rel(base, target)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {

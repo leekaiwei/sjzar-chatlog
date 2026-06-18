@@ -3,8 +3,10 @@ package chatlog
 import "testing"
 
 func TestValidateHTTPAddrRejectsWildcard(t *testing.T) {
-	if err := validateHTTPAddr("0.0.0.0:5030"); err == nil {
-		t.Fatal("expected wildcard bind address to be rejected")
+	for _, addr := range []string{"0.0.0.0:5030", "[::]:5030", ":5030"} {
+		if err := validateHTTPAddr(addr); err == nil {
+			t.Fatalf("expected %q to be rejected as a non-loopback bind address", addr)
+		}
 	}
 }
 
